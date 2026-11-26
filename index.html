@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Unificador de Treino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: coluna única estreita, ferramenta de trabalho. Zona de envio no topo, resultados empilhados por treino. */
+:root{
+  /* Tokyo Night (storm/night), tema único escuro */
+  --bg:#1a1b26; --surface:#24283b; --surface2:#292e42; --ink:#c0caf5; --muted:#9aa5ce; --line:#3b4261;
+  --accent:#7aa2f7; --accent-ink:#1a1b26; --good:#9ece6a; --warn:#e0af68; --bad:#f7768e;
+  --z1:#73daca; --z2:#7aa2f7; --z3:#e0af68; --z4:#ff9e64; --z5:#f7768e;
+  --f-head:"Space Grotesk",system-ui,sans-serif; --f-body:"Inter",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);
+  padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:20px;min-width:0}
+h1,h2,h3{font-family:var(--f-head);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:28px;line-height:1.15}
+.brand{font:700 13px var(--f-head);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.foot{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+.foot b{font-family:var(--f-head);color:var(--ink);letter-spacing:.04em}
+h2{font-size:20px}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:var(--f-body);font-weight:600}
+p{margin:0}
+.lede{color:var(--muted);max-width:62ch;margin-top:6px}
+.drop{border:2px dashed var(--line);background:var(--surface);border-radius:10px;padding:28px 20px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--surface2)}
+.drop:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.drop strong{font-family:var(--f-head);font-size:17px}
+.drop span{color:var(--muted);font-size:14px;max-width:52ch}
+.btn{font:600 14px var(--f-body);background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:10px 16px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn[disabled]{opacity:.5;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.files{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;min-width:0;max-width:100%}
+.chip b{font-weight:600;color:var(--accent)}
+.chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.chip.bad b{color:var(--bad)}
+.settings{display:flex;flex-wrap:wrap;gap:16px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.settings label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.settings input{width:84px;font:500 15px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+.settings small{flex-basis:100%;color:var(--muted);font-size:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--muted)}
+.pill.ok{color:var(--good);border-color:var(--good)}
+.pill.warn{color:var(--warn);border-color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px 18px;margin:0}
+.stats div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.stats dt{font-size:12px;color:var(--muted)}
+.stats dd{margin:0;font:600 19px var(--f-head);font-variant-numeric:tabular-nums}
+.stats dd small{font:400 13px var(--f-body);color:var(--muted)}
+.zones{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--surface2)}
+.zones span{display:block;min-width:0}
+.zlegend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
+.zlegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.ex{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;padding:12px 0;border-top:1px solid var(--line)}
+.ex:first-child{border-top:0;padding-top:0}
+.ex .top{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;align-items:baseline}
+.ex .name{font-weight:600}
+.ex .vol{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.sets{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+.sets span{font-size:13px;background:var(--surface2);border-radius:5px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.sets span.low{outline:1px solid var(--warn)}
+.note{font-size:13.5px;display:flex;gap:8px;align-items:baseline}
+.note::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted);transform:translateY(-1px)}
+.note.good::before{background:var(--good)} .note.warn::before{background:var(--warn)} .note.bad::before{background:var(--bad)}
+ul.obs{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.hint{font-size:13px;color:var(--muted);max-width:68ch}
+.empty{color:var(--muted);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.empty ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.err{color:var(--bad);font-size:14px}
+textarea{width:100%;font:13.5px/1.5 var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;resize:vertical;margin:10px 0}
+@media (max-width:520px){h1{font-size:24px}.card{padding:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+html,body{margin:0}
+</style>
+
+</head>
+<body>
+<main>
+  <header>
+    <p class="brand">Butzke Tech</p>
+    <h1>Unificador de Treino</h1>
+    <p class="lede">Envie o .json do Hevy e o .fit do relógio. A página analisa cada exercício, cruza com a frequência cardíaca e gera um .fit de musculação para o Strava. Tudo roda no seu navegador, nenhum arquivo sai daqui.</p>
+  </header>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Escolher arquivos">
+    <strong>Solte os arquivos aqui ou clique para escolher</strong>
+    <span>Aceita .json (Hevy) e .fit (relógio), quantos quiser. Treinos de dias diferentes são pareados pelo horário.</span>
+    <input id="pick" type="file" accept=".json,.fit,application/json" multiple hidden>
+  </div>
+
+  <div class="files" id="files" aria-live="polite"></div>
+
+  <div class="settings">
+    <label for="age">Idade
+      <input id="age" type="number" min="10" max="90" value="35"></label>
+    <label for="rmin">Reps mínimas
+      <input id="rmin" type="number" min="1" max="30" value="8"></label>
+    <label for="rmax">Reps máximas
+      <input id="rmax" type="number" min="1" max="50" value="12"></label>
+    <label for="title">Título do texto
+      <input id="title" type="text" value="Treino" maxlength="60" style="width:260px"></label>
+    <small>A FC máxima é estimada em 220 menos a idade (estimativa, não medida). A faixa de reps define quando sugerir manter, reduzir ou subir a carga.</small>
+  </div>
+
+  <section id="out" class="row" style="flex-direction:column;align-items:stretch;gap:20px"></section>
+
+  <footer class="foot"><div>Desenvolvido por <b>Evaldo</b> · <b>Butzke Tech</b> · <span>evaldo.butzke@butzke.tech</span></div><div>Os arquivos são processados no seu navegador.</div></footer>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n, d = 0) => Number(n).toLocaleString('pt-BR', {maximumFractionDigits: d});
+const FIT_EPOCH = 631065600;
+
+/* ---------- mapa exercício → código FIT ---------- */
+let EXMAP = {LAT_PULLDOWN:[21,13],SEATED_CABLE_ROW:[23,18],BARBELL_BICEPS_CURL:[7,3],BARBELL_UPRIGHT_ROW:[26,2],FACE_PULL:[23,5]};
+fetch('exmap.json').then(r => r.ok ? r.json() : null).then(j => { if (j) { EXMAP = j; render(); } }).catch(() => {});
+
+/* ---------- leitura de FIT ---------- */
+function parseFit(buf) {
+  const dv = new DataView(buf);
+  if (buf.byteLength < 14 || String.fromCharCode(dv.getUint8(8), dv.getUint8(9), dv.getUint8(10), dv.getUint8(11)) !== '.FIT') throw new Error('não é um arquivo FIT');
+  const hs = dv.getUint8(0), end = Math.min(buf.byteLength, hs + dv.getUint32(4, true));
+  const defs = {}, recs = []; let sess = null, last = 0, p = hs;
+  const readData = (d, p0, tsC) => {
+    let p1 = p0; const v = {};
+    for (const f of d.fields) {
+      if (f.size === 1) v[f.num] = dv.getUint8(p1);
+      else if (f.size === 2) v[f.num] = dv.getUint16(p1, d.le);
+      else if (f.size === 4) v[f.num] = dv.getUint32(p1, d.le);
+      p1 += f.size;
+    }
+    for (const s of d.dev) p1 += s;
+    if (v[253] != null) last = v[253];
+    if (d.g === 20) {
+      const t = v[253] ?? tsC, hr = v[3];
+      if (t != null && hr && hr < 255) recs.push({t: t + FIT_EPOCH, hr});
+    } else if (d.g === 18) {
+      sess = {start: v[2] != null ? v[2] + FIT_EPOCH : null, kcal: v[11] != null && v[11] < 0xFFFF ? v[11] : null};
+    }
+    return p1;
+  };
+  while (p < end) {
+    const h = dv.getUint8(p++);
+    if (h & 0x80) {
+      const d = defs[(h >> 5) & 3]; let ts = (last & ~0x1f) + (h & 0x1f); if (ts < last) ts += 32; last = ts;
+      p = readData(d, p, ts); continue;
+    }
+    const lt = h & 0xf;
+    if (h & 0x40) {
+      p++; const le = dv.getUint8(p++) === 0; const g = dv.getUint16(p, le); p += 2;
+      const n = dv.getUint8(p++), fields = [], dev = [];
+      for (let i = 0; i < n; i++) { fields.push({num: dv.getUint8(p), size: dv.getUint8(p + 1)}); p += 3; }
+      if (h & 0x20) { const m = dv.getUint8(p++); for (let i = 0; i < m; i++) { dev.push(dv.getUint8(p + 1)); p += 3; } }
+      defs[lt] = {g, le, fields, dev};
+    } else p = readData(defs[lt], p, null);
+  }
+  if (!recs.length) throw new Error('sem frequência cardíaca no arquivo');
+  const hrs = recs.map(r => r.hr);
+  return {recs, start: recs[0].t, end: recs[recs.length - 1].t, kcal: sess?.kcal ?? null,
+    avg: Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length), max: Math.max(...hrs)};
+}
+
+/* ---------- escrita de FIT ---------- */
+const CRC16T = [0x0000,0xCC01,0xD801,0x1400,0xF001,0x3C00,0x2800,0xE401,0xA001,0x6C00,0x7800,0xB401,0x5000,0x9C01,0x8801,0x4400];
+function crc16(b, crc = 0) {
+  for (const x of b) {
+    let t = CRC16T[crc & 0xF]; crc = (crc >> 4) & 0x0FFF; crc = crc ^ t ^ CRC16T[x & 0xF];
+    t = CRC16T[crc & 0xF]; crc = (crc >> 4) & 0x0FFF; crc = crc ^ t ^ CRC16T[(x >> 4) & 0xF];
+  }
+  return crc;
+}
+const E = 0x00, U8 = 0x02, U16 = 0x84, U32 = 0x86, U32Z = 0x8C;
+class FitW {
+  constructor() { this.b = []; this.defs = new Map(); this.n = 0; }
+  u8(v) { this.b.push(v & 255); }
+  u16(v) { this.u8(v); this.u8(v >> 8); }
+  u32(v) { this.u16(v & 0xffff); this.u16((v >>> 16) & 0xffff); }
+  msg(g, fields) {
+    const sig = g + ':' + fields.map(f => f[0] + '/' + f[1] + '/' + f[2]).join(',');
+    let lt = this.defs.get(sig);
+    if (lt === undefined) {
+      lt = this.n++; this.defs.set(sig, lt);
+      this.u8(0x40 | lt); this.u8(0); this.u8(0); this.u16(g); this.u8(fields.length);
+      for (const f of fields) { this.u8(f[0]); this.u8(f[1]); this.u8(f[2]); }
+    }
+    this.u8(lt);
+    for (const f of fields) f[1] === 1 ? this.u8(f[3]) : f[1] === 2 ? this.u16(f[3]) : this.u32(f[3]);
+  }
+  finish() {
+    const data = Uint8Array.from(this.b), out = new Uint8Array(14 + data.length + 2), dv = new DataView(out.buffer);
+    dv.setUint8(0, 14); dv.setUint8(1, 0x20); dv.setUint16(2, 2140, true); dv.setUint32(4, data.length, true);
+    out.set([0x2E, 0x46, 0x49, 0x54], 8); dv.setUint16(12, crc16(out.subarray(0, 12)), true);
+    out.set(data, 14); dv.setUint16(14 + data.length, crc16(out.subarray(0, 14 + data.length)), true);
+    return out;
+  }
+}
+const ft = ms => Math.round(ms / 1000) - FIT_EPOCH;
+
+function buildFit(w) {
+  const sets = w.sets, fit = w.fit;
+  const startS = fit ? fit.start : Math.round(w.startMs / 1000);
+  const endS = fit ? fit.end : startS + Math.round(w.elapsed);
+  const tot = Math.max(1, endS - startS);
+  const kcal = fit?.kcal ?? w.kcal ?? null;
+  const o = new FitW(), S = startS - FIT_EPOCH, En = endS - FIT_EPOCH;
+  o.msg(0, [[0,1,E,4],[1,2,U16,255],[2,2,U16,0],[3,4,U32Z,1],[4,4,U32,S]]);
+  o.msg(21, [[253,4,U32,S],[0,1,E,0],[1,1,E,0]]);
+  if (fit) for (const r of fit.recs) o.msg(20, [[253,4,U32,r.t - FIT_EPOCH],[3,1,U8,r.hr]]);
+  let i = 0;
+  for (const s of sets) {
+    const code = EXMAP[s.type]; if (!code) continue;
+    const t = ft(s.ms);
+    o.msg(225, [[253,4,U32,t],[0,4,U32,40000],[3,2,U16,s.reps],[4,2,U16,Math.round(s.kg * 16)],[5,1,U8,1],[6,4,U32,t],[7,2,U16,code[0]],[8,2,U16,code[1]],[254,2,U16,i++]]);
+  }
+  const hr = fit ? [[15,1,U8,fit.avg],[16,1,U8,fit.max]] : [];
+  const lap = [[253,4,U32,En],[2,4,U32,S],[7,4,U32,tot * 1000],[8,4,U32,tot * 1000]];
+  if (kcal != null) lap.push([11,2,U16,kcal]);
+  o.msg(19, [...lap, ...hr, [254,2,U16,0]]);
+  const ses = [[253,4,U32,En],[2,4,U32,S],[7,4,U32,tot * 1000],[8,4,U32,tot * 1000],[5,1,E,10],[6,1,E,20]];
+  if (kcal != null) ses.push([11,2,U16,kcal]);
+  if (fit) ses.push([16,1,U8,fit.avg],[17,1,U8,fit.max]);
+  ses.push([25,2,U16,0],[26,2,U16,1],[254,2,U16,0]);
+  o.msg(18, ses);
+  o.msg(21, [[253,4,U32,En],[0,1,E,0],[1,1,E,4]]);
+  o.msg(34, [[253,4,U32,En],[0,4,U32,tot * 1000],[1,2,U16,1],[2,1,E,0],[3,1,E,26],[4,1,E,1]]);
+  return o.finish();
+}
+
+/* ---------- zip (sem compressão) para o Strava aceitar o .fit ---------- */
+const CRC32T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for (const x of b) c = CRC32T[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zip(name, data) {
+  const nb = new TextEncoder().encode(name), crc = crc32(data), d = new Date();
+  const dt = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(), tm = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const lh = new DataView(new ArrayBuffer(30)), ch = new DataView(new ArrayBuffer(46)), en = new DataView(new ArrayBuffer(22));
+  lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(10, tm, true); lh.setUint16(12, dt, true);
+  lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nb.length, true);
+  ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(12, tm, true); ch.setUint16(14, dt, true);
+  ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, nb.length, true);
+  const cdOff = 30 + nb.length + data.length;
+  en.setUint32(0, 0x06054b50, true); en.setUint16(8, 1, true); en.setUint16(10, 1, true); en.setUint32(12, 46 + nb.length, true); en.setUint32(16, cdOff, true);
+  return new Blob([lh, nb, data, ch, nb, en], {type: 'application/zip'});
+}
+
+/* ---------- estado ---------- */
+let loaded = [];           // {name, kind:'fit'|'json', data} ou {name, error}
+let workouts = [];
+const localSave = async ({filename, data}) => {
+  const u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+  const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 2000); return {status: 'saved'};
+};
+let downloads = window.claude?.use ? null : {save: localSave, raw: true};
+const cfg = {age: 35, rmin: 8, rmax: 12, title: 'Treino'};
+try { const s = JSON.parse(localStorage.getItem('unificador-cfg') || '{}'); for (const k of ['age','rmin','rmax','title']) if (s[k]) cfg[k] = s[k]; } catch (e) {}
+for (const k of ['age','rmin','rmax','title']) $('#' + k).value = cfg[k];
+if (window.claude?.use) window.claude.use('downloads').then(d => { downloads = d || {save: localSave, raw: true}; render(); }).catch(() => { downloads = {save: localSave, raw: true}; render(); });
+
+async function addFiles(list) {
+  for (const f of list) {
+    try {
+      const buf = await f.arrayBuffer();
+      const head = new Uint8Array(buf.slice(8, 12));
+      if (/\.fit$/i.test(f.name) || String.fromCharCode(...head) === '.FIT') loaded.push({name: f.name, kind: 'fit', data: parseFit(buf)});
+      else {
+        const j = JSON.parse(new TextDecoder().decode(buf));
+        if (!Array.isArray(j.sets)) throw new Error('JSON sem lista de séries (sets)');
+        loaded.push({name: f.name, kind: 'json', data: j});
+      }
+    } catch (e) { loaded.push({name: f.name, error: e.message || 'arquivo inválido'}); }
+  }
+  pair(); render();
+}
+
+function pair() {
+  const fits = loaded.filter(x => x.kind === 'fit').map(x => ({...x, used: false}));
+  const out = [];
+  for (const x of loaded.filter(x => x.kind === 'json')) {
+    const j = x.data, startMs = Date.parse(j.start_time);
+    const sets = (j.sets || []).map(s => ({type: s.exercise_type, reps: s.repetitions, kg: s.weight, ms: Date.parse(s.start_time)}))
+      .filter(s => !isNaN(s.ms)).sort((a, b) => a.ms - b.ms);
+    let best = null;
+    for (const f of fits) if (!f.used) { const d = Math.abs(f.data.start * 1000 - startMs); if (d <= 30 * 60000 && (!best || d < best.d)) best = {f, d}; }
+    if (best) best.f.used = true;
+    out.push({name: x.name, startMs: isNaN(startMs) ? (sets[0]?.ms ?? Date.now()) : startMs, elapsed: j.elapsed_time || ((sets.at(-1)?.ms - sets[0]?.ms) / 1000 || 0),
+      kcal: j.total_calories ?? null, sets, fit: best ? best.f.data : null, fitName: best?.f.name});
+  }
+  for (const f of fits) if (!f.used) out.push({name: f.name, startMs: f.data.start * 1000, elapsed: f.data.end - f.data.start, sets: [], fit: f.data, fitName: f.name, hrOnly: true});
+  workouts = out.sort((a, b) => a.startMs - b.startMs);
+}
+
+/* ---------- análise ---------- */
+const pretty = t => t.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+const dur = s => { s = Math.round(s); const m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
+
+function zonesOf(fit, maxHr) {
+  const lim = [.6, .7, .8, .9], secs = [0, 0, 0, 0, 0];
+  for (let i = 0; i < fit.recs.length; i++) {
+    const dt = i < fit.recs.length - 1 ? Math.min(30, fit.recs[i + 1].t - fit.recs[i].t) : 10;
+    const r = fit.recs[i].hr / maxHr; let z = lim.findIndex(l => r < l); if (z < 0) z = 4; secs[z] += dt;
+  }
+  return secs;
+}
+
+function exercises(w) {
+  const order = [], by = {};
+  for (const s of w.sets) { if (!by[s.type]) { by[s.type] = []; order.push(s.type); } by[s.type].push(s); }
+  return order.map(type => {
+    const ss = by[type], top = Math.max(...ss.map(s => s.kg)), topSets = ss.filter(s => s.kg === top), reps = topSets.map(s => s.reps);
+    const vol = ss.reduce((a, s) => a + s.reps * s.kg, 0);
+    let tone = 'good', msg;
+    const drop = reps.length >= 3 ? (reps[0] - reps[reps.length - 1]) / reps[0] : 0;
+    if (drop >= .3) { tone = 'warn'; msg = `As reps caíram de ${reps[0]} para ${reps[reps.length - 1]} com ${fmt(top, 1)} kg. Reduza a carga (cerca de ${fmt(Math.floor(top * .9 / 2.5) * 2.5, 1)} kg) e só suba quando fechar todas as séries na faixa.`; }
+    else if (reps.every(r => r >= cfg.rmax)) { msg = `Todas as séries no topo da faixa (${cfg.rmax} reps). Pode subir a carga na próxima vez.`; }
+    else if (Math.min(...reps) < cfg.rmin) { tone = 'warn'; msg = `Alguma série ficou abaixo de ${cfg.rmin} reps. Mantenha ou reduza um pouco a carga.`; }
+    else msg = `Dentro da faixa de ${cfg.rmin} a ${cfg.rmax} reps. Mantenha ${fmt(top, 1)} kg até chegar a ${cfg.rmax} reps em todas as séries.`;
+    return {type, ss, vol, tone, msg, mapped: !!EXMAP[type]};
+  });
+}
+
+function observations(w, exs) {
+  const o = [], gaps = [];
+  for (const ex of exs) for (let i = 1; i < ex.ss.length; i++) {
+    const g = (ex.ss[i].ms - ex.ss[i - 1].ms) / 1000;
+    if (g < 5) o.push(['warn', `${pretty(ex.type)}: séries ${i} e ${i + 1} registradas com ${fmt(g, 0)} s de diferença. Pode ser erro de registro no app.`]);
+    else gaps.push(g);
+  }
+  if (gaps.length) { const m = median(gaps); o.push([m > 100 ? 'warn' : 'good', `Intervalo típico entre séries (início a início): ${fmt(m / 60, 1)} min. ${m > 100 ? 'Isso inclui o tempo da série; acima de 2 min sugere descanso maior que os 60 a 90 s planejados.' : 'Compatível com descanso curto.'}`]); }
+  const unm = exs.filter(e => !e.mapped).map(e => pretty(e.type));
+  if (unm.length) o.push(['bad', `Sem equivalente no formato FIT, ficam fora do arquivo: ${unm.join(', ')}.`]);
+  return o;
+}
+
+/* ---------- render ---------- */
+const ZN = ['Z1 leve', 'Z2', 'Z3', 'Z4', 'Z5 máx'];
+const PT = {LAT_PULLDOWN:'Puxada na polia',SEATED_CABLE_ROW:'Remada sentada na polia',BARBELL_BICEPS_CURL:'Rosca direta com barra',
+  BARBELL_UPRIGHT_ROW:'Remada alta com barra',FACE_PULL:'Face pull',HAMMER_CURL:'Rosca martelo',DUMBBELL_HAMMER_CURL:'Rosca martelo',
+  LATERAL_RAISE:'Elevação lateral',DUMBBELL_LATERAL_RAISE:'Elevação lateral',TRICEPS_PUSHDOWN:'Tríceps na polia',
+  CABLE_TRICEPS_PUSHDOWN:'Tríceps na polia',OVERHEAD_TRICEPS_EXTENSION:'Tríceps overhead',LEG_PRESS:'Leg Press 45º (Máquina)',
+  LEG_EXTENSION:'Cadeira extensora',LEG_CURL:'Mesa flexora',SEATED_LEG_CURL:'Mesa flexora sentada',STANDING_CALF_RAISE:'Panturrilha em pé',
+  SHOULDER_PRESS:'Desenvolvimento',MACHINE_SHOULDER_PRESS:'Desenvolvimento máquina',CHEST_PRESS:'Supino máquina',
+  INCLINE_CHEST_PRESS:'Supino inclinado máquina',SEATED_CALF_RAISE:'Panturrilha Sentado (Máquina)',HACK_SQUAT:'Agachamento Hack',HIP_ABDUCTION:'Abdução de quadril'};
+const ptName = t => PT[t] || pretty(t);
+
+function describe(w, exs) {
+  const nSets = w.sets.length, reps = w.sets.reduce((a, s) => a + s.reps, 0), vol = w.sets.reduce((a, s) => a + s.reps * s.kg, 0);
+  const kcal = w.fit?.kcal ?? w.kcal, mins = Math.round((w.fit ? w.fit.end - w.fit.start : w.elapsed) / 60);
+  const body = exs.flatMap(e => [ptName(e.type), ...e.ss.map((s, i) => `Série ${i + 1}: ${fmt(s.kg, 1)} kg x ${s.reps}`)]);
+  const lines = [`${cfg.title || 'Treino'} 💪`, '', ...body, '',
+    `📊 ${nSets} séries · ${fmt(reps)} reps · ${fmt(vol)} kg de volume`];
+  if (w.fit) lines.push(`❤️ FC média ${w.fit.avg} bpm · máx ${w.fit.max} bpm`);
+  lines.push(`⏱️ ${mins} min` + (kcal != null ? ` · ${fmt(kcal)} kcal` : ''));
+  return lines.join('\n');
+}
+
+function card(w, idx) {
+  const maxHr = 220 - cfg.age, exs = exercises(w), obs = observations(w, exs);
+  const nSets = w.sets.length, reps = w.sets.reduce((a, s) => a + s.reps, 0), vol = w.sets.reduce((a, s) => a + s.reps * s.kg, 0);
+  const when = new Date(w.startMs).toLocaleString('pt-BR', {weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+  const status = w.hrOnly ? '<span class="pill warn">Só relógio, falta o JSON do Hevy</span>' : w.fit ? '<span class="pill ok">Hevy + relógio unidos</span>' : '<span class="pill warn">Só Hevy, sem FC</span>';
+  const kcal = w.fit?.kcal ?? w.kcal;
+  let h = `<article class="card"><div class="head"><h2>${esc(when)}</h2>${status}</div><dl class="stats">`;
+  h += `<div><dt>Duração</dt><dd>${esc(dur(w.fit ? w.fit.end - w.fit.start : w.elapsed))}</dd></div>`;
+  if (nSets) h += `<div><dt>Séries</dt><dd>${nSets} <small>${reps} reps</small></dd></div><div><dt>Volume</dt><dd>${fmt(vol)} <small>kg</small></dd></div>`;
+  if (w.fit) h += `<div><dt>FC média</dt><dd>${w.fit.avg} <small>bpm</small></dd></div><div><dt>FC máxima</dt><dd>${w.fit.max} <small>bpm</small></dd></div>`;
+  if (kcal != null) h += `<div><dt>Calorias</dt><dd>${fmt(kcal)} <small>kcal</small></dd></div>`;
+  h += '</dl>';
+  if (w.fit) {
+    const z = zonesOf(w.fit, maxHr), tz = z.reduce((a, b) => a + b, 0) || 1;
+    h += `<div><h3>Tempo por zona de FC (máx. estimada ${maxHr} bpm)</h3><div class="zones" style="margin-top:8px" role="img" aria-label="Distribuição do tempo por zona de frequência cardíaca">`;
+    z.forEach((s, i) => { h += `<span style="width:${(s / tz * 100).toFixed(2)}%;background:var(--z${i + 1})"></span>`; });
+    h += '</div><div class="zlegend">';
+    z.forEach((s, i) => { h += `<span><i style="background:var(--z${i + 1})"></i>${ZN[i]} ${fmt(s / 60, 1)} min</span>`; });
+    h += '</div></div>';
+  }
+  if (exs.length) {
+    h += '<div><h3>Exercícios</h3><div style="margin-top:12px">';
+    for (const ex of exs) {
+      h += `<div class="ex"><div class="top"><span class="name">${esc(pretty(ex.type))}</span><span class="vol">${ex.ss.length} séries · ${fmt(ex.vol)} kg de volume</span></div><div class="sets">`;
+      const top = Math.max(...ex.ss.map(s => s.kg));
+      for (const s of ex.ss) h += `<span class="${s.kg === top && s.reps < cfg.rmin ? 'low' : ''}">${s.reps} × ${fmt(s.kg, 1)} kg</span>`;
+      h += `</div><div class="note ${ex.tone}">${esc(ex.msg)}</div></div>`;
+    }
+    h += '</div></div>';
+  }
+  if (obs.length) { h += '<div><h3>Observações</h3><ul class="obs" style="margin-top:10px">'; for (const [t, m] of obs) h += `<li class="note ${t}">${esc(m)}</li>`; h += '</ul></div>'; }
+  if (nSets) {
+    h += `<div><h3>Texto para a descrição no Strava</h3><textarea id="txt${idx}" rows="${describe(w, exs).split('\n').length + 1}\">${esc(describe(w, exs))}</textarea><button class="btn ghost" data-copy="${idx}" type="button">Copiar texto</button></div>`;
+    h += `<div class="row"><button class="btn" data-dl="${idx}" ${downloads ? '' : 'disabled'}>${downloads?.raw ? 'Baixar .fit para o Strava' : 'Baixar para o Strava (.zip com .fit)'}</button></div>`;
+    h += downloads?.raw ? '<p class="hint">Envie o .fit em strava.com/upload/select. O Strava mostra o tipo como musculação.</p>'
+      : downloads ? '<p class="hint">Extraia o .zip e envie o .fit em strava.com/upload/select. O Strava mostra o tipo como musculação. O download só aceita extensões comuns, por isso o .fit vai dentro do .zip.</p>'
+      : '<p class="hint">O download de arquivos não está disponível nesta visualização. Abra a página no navegador ou no app do Claude para baixar.</p>';
+  }
+  return h + '</article>';
+}
+
+function render() {
+  $('#files').innerHTML = loaded.map((x, i) => x.error
+    ? `<span class="chip bad"><b>Erro</b><i>${esc(x.name)}: ${esc(x.error)}</i></span>`
+    : `<span class="chip"><b>${x.kind === 'fit' ? 'FIT' : 'HEVY'}</b><i>${esc(x.name)}</i></span>`).join('')
+    + (loaded.length ? '<button class="btn ghost" id="clear" type="button">Limpar</button>' : '');
+  const out = $('#out');
+  if (!workouts.length) {
+    out.innerHTML = `<div class="empty"><strong>Aqui aparece a análise de cada treino.</strong><ol>
+      <li>No Hevy, exporte o treino como .json.</li><li>Pegue o .fit do mesmo dia no app do relógio.</li>
+      <li>Solte os dois acima. O pareamento é pelo horário de início, com até 30 minutos de diferença.</li></ol></div>`;
+    return;
+  }
+  out.innerHTML = workouts.map(card).join('');
+}
+
+/* ---------- eventos ---------- */
+const drop = $('#drop'), pick = $('#pick');
+drop.addEventListener('click', () => pick.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick.click(); } });
+pick.addEventListener('change', () => { addFiles([...pick.files]); pick.value = ''; });
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+document.addEventListener('click', async e => {
+  if (e.target.id === 'clear') { loaded = []; workouts = []; render(); return; }
+  const c = e.target.closest('[data-copy]');
+  if (c) {
+    const ta = document.getElementById('txt' + c.dataset.copy);
+    try { await navigator.clipboard.writeText(ta.value); c.textContent = 'Copiado'; }
+    catch (x) { ta.select(); c.textContent = 'Selecionado, use Ctrl+C'; }
+    return;
+  }
+  const b = e.target.closest('[data-dl]'); if (!b || !downloads) return;
+  const w = workouts[+b.dataset.dl], d = new Date(w.startMs), p2 = n => String(n).padStart(2, '0');
+  const base = `Treino_${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_Strava`;
+  try { await downloads.save(downloads.raw ? {filename: base + '.fit', data: buildFit(w)} : {filename: base + '.zip', data: zip(base + '.fit', buildFit(w))}); }
+  catch (err) { if (err?.code !== 'declined') { const n = document.createElement('p'); n.className = 'err'; n.textContent = 'Não foi possível salvar o arquivo (' + (err?.code || 'erro') + ').'; b.parentNode.appendChild(n); } }
+});
+for (const k of ['age', 'rmin', 'rmax']) $('#' + k).addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10); if (v > 0) { cfg[k] = v; try { localStorage.setItem('unificador-cfg', JSON.stringify(cfg)); } catch (x) {} render(); }
+});
+$('#title').addEventListener('input', e => {
+  cfg.title = e.target.value; try { localStorage.setItem('unificador-cfg', JSON.stringify(cfg)); } catch (x) {} render();
+});
+render();
+})();
+</script>
+</body>
+</html>

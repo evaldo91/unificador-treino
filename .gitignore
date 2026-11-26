@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+# arquivos pessoais de treino
+*.fit
+*.zip
+*.json
+!exmap.json
