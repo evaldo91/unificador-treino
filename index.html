@@ -223,11 +223,11 @@ const byKeyword = t => { const r = RULES.find(([re]) => re.test(t)); return r ? 
 const codeFor = t => EXMAP[t] ? {cat: EXMAP[t][0], sub: EXMAP[t][1]} : {cat: byKeyword(t) ?? CAT.UNKNOWN, sub: null};
 
 function buildFit(w) {
-  const sets = w.sets, fit = w.fit;
-  const startS = fit ? fit.start : Math.round(w.startMs / 1000);
-  const endS = fit ? fit.end : startS + Math.round(w.elapsed);
+  const sets = w.sets, fit = w.hr;  // fit = só a FC (recs, avg, max)
+  const startS = Math.round(w.startMs / 1000);
+  const endS = startS + Math.round(w.elapsed);
   const tot = Math.max(1, endS - startS);
-  const kcal = fit?.kcal ?? w.kcal ?? null;
+  const kcal = w.kcal ?? w.fit?.kcal ?? null;
   const o = new FitW(), S = startS - FIT_EPOCH, En = endS - FIT_EPOCH;
   o.msg(0, [[0,1,E,4],[1,2,U16,255],[2,2,U16,0],[3,4,U32Z,1],[4,4,U32,S]]);
   o.msg(21, [[253,4,U32,S],[0,1,E,0],[1,1,E,0]]);
@@ -235,9 +235,9 @@ function buildFit(w) {
   let i = 0;
   for (const s of sets) {
     const code = codeFor(s.type), t = ft(s.ms);
-    const f = [[253,4,U32,t],[0,4,U32,40000],[3,2,U16,s.reps],[4,2,U16,Math.round(s.kg * 16)],[5,1,U8,1],[6,4,U32,t],[7,2,U16,code.cat]];
+    const f = [[254,4,U32,t],[0,4,U32,40000],[3,2,U16,s.reps],[4,2,U16,Math.round(s.kg * 16)],[5,1,U8,1],[6,4,U32,t],[7,2,U16,code.cat]];
     if (code.sub != null) f.push([8,2,U16,code.sub]);
-    o.msg(225, [...f, [254,2,U16,i++]]);
+    o.msg(225, [...f, [10,2,U16,i++]]);
   }
   const hr = fit ? [[15,1,U8,fit.avg],[16,1,U8,fit.max]] : [];
   const lap = [[253,4,U32,En],[2,4,U32,S],[7,4,U32,tot * 1000],[8,4,U32,tot * 1000]];
@@ -299,6 +299,8 @@ async function addFiles(list) {
   pair(); render();
 }
 
+const mkHr = recs => recs.length ? {recs, avg: Math.round(recs.reduce((a, r) => a + r.hr, 0) / recs.length), max: Math.max(...recs.map(r => r.hr))} : null;
+
 function pair() {
   const fits = loaded.filter(x => x.kind === 'fit').map(x => ({...x, used: false}));
   const out = [];
@@ -309,10 +311,15 @@ function pair() {
     let best = null;
     for (const f of fits) if (!f.used) { const d = Math.abs(f.data.start * 1000 - startMs); if (d <= 30 * 60000 && (!best || d < best.d)) best = {f, d}; }
     if (best) best.f.used = true;
-    out.push({name: x.name, startMs: isNaN(startMs) ? (sets[0]?.ms ?? Date.now()) : startMs, elapsed: j.elapsed_time || ((sets.at(-1)?.ms - sets[0]?.ms) / 1000 || 0),
-      kcal: j.total_calories ?? null, sets, fit: best ? best.f.data : null, fitName: best?.f.name});
+    const st = isNaN(startMs) ? (sets[0]?.ms ?? Date.now()) : startMs, el = j.elapsed_time || ((sets.at(-1)?.ms - sets[0]?.ms) / 1000 || 0);
+    const w0 = Math.round(st / 1000), w1 = w0 + Math.round(el);
+    let hr = null;  // FC: do relógio quando há .fit; senão, as amostras que o próprio Hevy exporta
+    if (best) hr = mkHr(best.f.data.recs.filter(r => r.t >= w0 && r.t <= w1));
+    else if (j.streams?.time?.length && j.streams?.heartrate?.length)
+      hr = mkHr(j.streams.time.map((t, k) => ({t: w0 + t, hr: j.streams.heartrate[k]})).filter(r => r.hr > 0 && r.hr < 255 && r.t <= w1));
+    out.push({name: x.name, startMs: st, elapsed: el, kcal: j.total_calories ?? null, sets, fit: best ? best.f.data : null, hr, fitName: best?.f.name});
   }
-  for (const f of fits) if (!f.used) out.push({name: f.name, startMs: f.data.start * 1000, elapsed: f.data.end - f.data.start, sets: [], fit: f.data, fitName: f.name, hrOnly: true});
+  for (const f of fits) if (!f.used) out.push({name: f.name, startMs: f.data.start * 1000, elapsed: f.data.end - f.data.start, sets: [], fit: f.data, kcal: f.data.kcal, hr: mkHr(f.data.recs), fitName: f.name, hrOnly: true});
   workouts = out.sort((a, b) => a.startMs - b.startMs);
 }
 
@@ -375,11 +382,11 @@ const kgTxt = n => String(Math.round(n * 100) / 100);
 
 function describe(w, exs) {
   const nSets = w.sets.length, reps = w.sets.reduce((a, s) => a + s.reps, 0), vol = w.sets.reduce((a, s) => a + s.reps * s.kg, 0);
-  const kcal = w.fit?.kcal ?? w.kcal, mins = Math.round((w.fit ? w.fit.end - w.fit.start : w.elapsed) / 60);
+  const kcal = w.kcal ?? w.fit?.kcal, mins = Math.round(w.elapsed / 60);
   const body = exs.flatMap(e => [ptName(e.type), ...e.ss.map((s, i) => `Série ${i + 1}: ${kgTxt(s.kg)} kg x ${s.reps}`)]);
   const lines = [`${cfg.title || 'Treino'} 💪`, '', ...body, '',
     `📊 ${nSets} séries · ${fmt(reps)} reps · ${fmt(vol)} kg de volume`];
-  if (w.fit) lines.push(`❤️ FC média ${w.fit.avg} bpm · máx ${w.fit.max} bpm`);
+  if (w.hr) lines.push(`❤️ FC média ${w.hr.avg} bpm · máx ${w.hr.max} bpm`);
   lines.push(`⏱️ ${mins} min` + (kcal != null ? ` · ${fmt(kcal)} kcal` : ''));
   return lines.join('\n');
 }
@@ -388,16 +395,16 @@ function card(w, idx) {
   const maxHr = 220 - cfg.age, exs = exercises(w), obs = observations(w, exs);
   const nSets = w.sets.length, reps = w.sets.reduce((a, s) => a + s.reps, 0), vol = w.sets.reduce((a, s) => a + s.reps * s.kg, 0);
   const when = new Date(w.startMs).toLocaleString('pt-BR', {weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-  const status = w.hrOnly ? '<span class="pill warn">Só relógio, falta o JSON do Hevy</span>' : w.fit ? '<span class="pill ok">Hevy + relógio unidos</span>' : '<span class="pill warn">Só Hevy, sem FC</span>';
-  const kcal = w.fit?.kcal ?? w.kcal;
+  const status = w.hrOnly ? '<span class="pill warn">Só relógio, falta o JSON do Hevy</span>' : w.fit ? '<span class="pill ok">Hevy + relógio unidos</span>' : w.hr ? '<span class="pill warn">Só Hevy, FC do próprio JSON</span>' : '<span class="pill warn">Só Hevy, sem FC</span>';
+  const kcal = w.kcal ?? w.fit?.kcal;
   let h = `<article class="card"><div class="head"><h2>${esc(when)}</h2>${status}</div><dl class="stats">`;
-  h += `<div><dt>Duração</dt><dd>${esc(dur(w.fit ? w.fit.end - w.fit.start : w.elapsed))}</dd></div>`;
+  h += `<div><dt>Duração</dt><dd>${esc(dur(w.elapsed))}</dd></div>`;
   if (nSets) h += `<div><dt>Séries</dt><dd>${nSets} <small>${reps} reps</small></dd></div><div><dt>Volume</dt><dd>${fmt(vol)} <small>kg</small></dd></div>`;
-  if (w.fit) h += `<div><dt>FC média</dt><dd>${w.fit.avg} <small>bpm</small></dd></div><div><dt>FC máxima</dt><dd>${w.fit.max} <small>bpm</small></dd></div>`;
+  if (w.hr) h += `<div><dt>FC média</dt><dd>${w.hr.avg} <small>bpm</small></dd></div><div><dt>FC máxima</dt><dd>${w.hr.max} <small>bpm</small></dd></div>`;
   if (kcal != null) h += `<div><dt>Calorias</dt><dd>${fmt(kcal)} <small>kcal</small></dd></div>`;
   h += '</dl>';
-  if (w.fit) {
-    const z = zonesOf(w.fit, maxHr), tz = z.reduce((a, b) => a + b, 0) || 1;
+  if (w.hr) {
+    const z = zonesOf(w.hr, maxHr), tz = z.reduce((a, b) => a + b, 0) || 1;
     h += `<div><h3>Tempo por zona de FC (máx. estimada ${maxHr} bpm)</h3><div class="zones" style="margin-top:8px" role="img" aria-label="Distribuição do tempo por zona de frequência cardíaca">`;
     z.forEach((s, i) => { h += `<span style="width:${(s / tz * 100).toFixed(2)}%;background:var(--z${i + 1})"></span>`; });
     h += '</div><div class="zlegend">';
