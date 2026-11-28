@@ -304,7 +304,7 @@ function pair() {
   const out = [];
   for (const x of loaded.filter(x => x.kind === 'json')) {
     const j = x.data, startMs = Date.parse(j.start_time);
-    const sets = (j.sets || []).map(s => ({type: s.exercise_type, reps: s.repetitions, kg: s.weight, ms: Date.parse(s.start_time)}))
+    const sets = (j.sets || []).map((s, i) => ({type: s.exercise_type, reps: s.repetitions, kg: s.weight, ms: Date.parse(s.start_time), i}))
       .filter(s => !isNaN(s.ms)).sort((a, b) => a.ms - b.ms);
     let best = null;
     for (const f of fits) if (!f.used) { const d = Math.abs(f.data.start * 1000 - startMs); if (d <= 30 * 60000 && (!best || d < best.d)) best = {f, d}; }
@@ -332,7 +332,7 @@ function zonesOf(fit, maxHr) {
 
 function exercises(w) {
   const order = [], by = {};
-  for (const s of w.sets) { if (!by[s.type]) { by[s.type] = []; order.push(s.type); } by[s.type].push(s); }
+  for (const s of [...w.sets].sort((a, b) => a.i - b.i)) { if (!by[s.type]) { by[s.type] = []; order.push(s.type); } by[s.type].push(s); }
   return order.map(type => {
     const ss = by[type], top = Math.max(...ss.map(s => s.kg)), topSets = ss.filter(s => s.kg === top), reps = topSets.map(s => s.reps);
     const vol = ss.reduce((a, s) => a + s.reps * s.kg, 0);
@@ -350,12 +350,12 @@ function observations(w, exs) {
   const o = [], gaps = [];
   for (const ex of exs) for (let i = 1; i < ex.ss.length; i++) {
     const g = (ex.ss[i].ms - ex.ss[i - 1].ms) / 1000;
-    if (g < 5) o.push(['warn', `${pretty(ex.type)}: séries ${i} e ${i + 1} registradas com ${fmt(g, 0)} s de diferença. Pode ser erro de registro no app.`]);
+    if (g < 5) o.push(['warn', `${ptName(ex.type)}: séries ${i} e ${i + 1} registradas com ${fmt(g, 0)} s de diferença. Pode ser erro de registro no app.`]);
     else gaps.push(g);
   }
   if (gaps.length) { const m = median(gaps); o.push([m > 100 ? 'warn' : 'good', `Intervalo típico entre séries (início a início): ${fmt(m / 60, 1)} min. ${m > 100 ? 'Isso inclui o tempo da série; acima de 2 min sugere descanso maior que os 60 a 90 s planejados.' : 'Compatível com descanso curto.'}`]); }
-  const gen = exs.filter(e => e.generic).map(e => pretty(e.type));
-  const apx = exs.filter(e => !e.mapped && !e.generic).map(e => pretty(e.type));
+  const gen = exs.filter(e => e.generic).map(e => ptName(e.type));
+  const apx = exs.filter(e => !e.mapped && !e.generic).map(e => ptName(e.type));
   if (apx.length) o.push(['good', `Sem código exato no formato FIT, enviados pela categoria do movimento: ${apx.join(', ')}.`]);
   if (gen.length) o.push(['warn', `Sem categoria reconhecida no formato FIT, enviados como categoria genérica: ${gen.join(', ')}.`]);
   return o;
@@ -363,19 +363,20 @@ function observations(w, exs) {
 
 /* ---------- render ---------- */
 const ZN = ['Z1 leve', 'Z2', 'Z3', 'Z4', 'Z5 máx'];
-const PT = {LAT_PULLDOWN:'Puxada na polia',SEATED_CABLE_ROW:'Remada sentada na polia',BARBELL_BICEPS_CURL:'Rosca direta com barra',
-  BARBELL_UPRIGHT_ROW:'Remada alta com barra',FACE_PULL:'Face pull',HAMMER_CURL:'Rosca martelo',DUMBBELL_HAMMER_CURL:'Rosca martelo',
-  LATERAL_RAISE:'Elevação lateral',DUMBBELL_LATERAL_RAISE:'Elevação lateral',TRICEPS_PUSHDOWN:'Tríceps na polia',
-  CABLE_TRICEPS_PUSHDOWN:'Tríceps na polia',OVERHEAD_TRICEPS_EXTENSION:'Tríceps overhead',LEG_PRESS:'Leg Press 45º (Máquina)',
-  LEG_EXTENSION:'Cadeira extensora',LEG_CURL:'Mesa flexora',SEATED_LEG_CURL:'Mesa flexora sentada',STANDING_CALF_RAISE:'Panturrilha em pé',
-  SHOULDER_PRESS:'Desenvolvimento',MACHINE_SHOULDER_PRESS:'Desenvolvimento máquina',CHEST_PRESS:'Supino máquina',
-  INCLINE_CHEST_PRESS:'Supino inclinado máquina',MACHINE_CHEST_PRESS:'Supino máquina',MACHINE_LEG_PRESS:'Leg Press 45º (Máquina)',MACHINE_HACK_SQUAT:'Agachamento Hack',MACHINE_LEG_EXTENSION:'Cadeira Extensora (Máquina)',MACHINE_LEG_CURL_SEATED:'Mesa Flexora Sentado (Máquina)',MACHINE_INCLINE_CHEST_PRESS:'Supino inclinado máquina',MACHINE_SEATED_SHOULDER_PRESS:'Desenvolvimento máquina',LATERAL_RAISE_GENERIC:'Elevação lateral',TRICEPS_PRESSDOWN:'Tríceps na polia',TRICEPS_EXTENSION_GENERIC:'Extensão de tríceps',SEATED_CALF_RAISE:'Panturrilha Sentado (Máquina)',HACK_SQUAT:'Agachamento Hack',HIP_ABDUCTION:'Abdução de quadril'};
+const PT = {LAT_PULLDOWN:'Puxada Alta (Cabo)',SEATED_CABLE_ROW:'Remada Sentada com Pegada em V (Cabo)',BARBELL_BICEPS_CURL:'Rosca Direta (Barra)',
+  BARBELL_UPRIGHT_ROW:'Remada Alta (Barra)',FACE_PULL:'Face Pull',HAMMER_CURL:'Rosca Martelo (Halter)',DUMBBELL_HAMMER_CURL:'Rosca Martelo (Halter)',
+  LATERAL_RAISE_GENERIC:'Elevação Lateral (Halter)',LATERAL_RAISE:'Elevação Lateral (Halter)',DUMBBELL_LATERAL_RAISE:'Elevação Lateral (Halter)',
+  TRICEPS_PRESSDOWN:'Tríceps na Polia',MACHINE_CHEST_PRESS:'Supino Sentado (Máquina)',MACHINE_INCLINE_CHEST_PRESS:'Supino Inclinado (Máquina)',
+  MACHINE_SEATED_SHOULDER_PRESS:'Desenvolvimento de Ombros Sentado (Máquina)',SEATED_CALF_RAISE:'Panturrilha Sentado (Máquina)',
+  MACHINE_LEG_PRESS:'Leg Press 45º (Máquina)',MACHINE_HACK_SQUAT:'Agachamento Hack (Máquina)',MACHINE_LEG_EXTENSION:'Cadeira Extensora (Máquina)',
+  MACHINE_LEG_CURL_SEATED:'Cadeira Flexora (Máquina)'};
 const ptName = t => PT[t] || pretty(t);
+const kgTxt = n => String(Math.round(n * 100) / 100);
 
 function describe(w, exs) {
   const nSets = w.sets.length, reps = w.sets.reduce((a, s) => a + s.reps, 0), vol = w.sets.reduce((a, s) => a + s.reps * s.kg, 0);
   const kcal = w.fit?.kcal ?? w.kcal, mins = Math.round((w.fit ? w.fit.end - w.fit.start : w.elapsed) / 60);
-  const body = exs.flatMap(e => [ptName(e.type), ...e.ss.map((s, i) => `Série ${i + 1}: ${fmt(s.kg, 1)} kg x ${s.reps}`)]);
+  const body = exs.flatMap(e => [ptName(e.type), ...e.ss.map((s, i) => `Série ${i + 1}: ${kgTxt(s.kg)} kg x ${s.reps}`)]);
   const lines = [`${cfg.title || 'Treino'} 💪`, '', ...body, '',
     `📊 ${nSets} séries · ${fmt(reps)} reps · ${fmt(vol)} kg de volume`];
   if (w.fit) lines.push(`❤️ FC média ${w.fit.avg} bpm · máx ${w.fit.max} bpm`);
@@ -406,7 +407,7 @@ function card(w, idx) {
   if (exs.length) {
     h += '<div><h3>Exercícios</h3><div style="margin-top:12px">';
     for (const ex of exs) {
-      h += `<div class="ex"><div class="top"><span class="name">${esc(pretty(ex.type))}</span><span class="vol">${ex.ss.length} séries · ${fmt(ex.vol)} kg de volume</span></div><div class="sets">`;
+      h += `<div class="ex"><div class="top"><span class="name">${esc(ptName(ex.type))}</span><span class="vol">${ex.ss.length} séries · ${fmt(ex.vol)} kg de volume</span></div><div class="sets">`;
       const top = Math.max(...ex.ss.map(s => s.kg));
       for (const s of ex.ss) h += `<span class="${s.kg === top && s.reps < cfg.rmin ? 'low' : ''}">${s.reps} × ${fmt(s.kg, 1)} kg</span>`;
       h += `</div><div class="note ${ex.tone}">${esc(ex.msg)}</div></div>`;
