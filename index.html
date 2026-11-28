@@ -137,7 +137,7 @@ function parseFit(buf) {
   const dv = new DataView(buf);
   if (buf.byteLength < 14 || String.fromCharCode(dv.getUint8(8), dv.getUint8(9), dv.getUint8(10), dv.getUint8(11)) !== '.FIT') throw new Error('não é um arquivo FIT');
   const hs = dv.getUint8(0), end = Math.min(buf.byteLength, hs + dv.getUint32(4, true));
-  const defs = {}, recs = []; let sess = null, last = 0, p = hs;
+  const defs = {}, recs = []; let sess = null, last = 0, p = hs, tMin = null, tMax = null;
   const readData = (d, p0, tsC) => {
     let p1 = p0; const v = {};
     for (const f of d.fields) {
@@ -150,6 +150,7 @@ function parseFit(buf) {
     if (v[253] != null) last = v[253];
     if (d.g === 20) {
       const t = v[253] ?? tsC, hr = v[3];
+      if (t != null) { if (tMin == null) tMin = t; tMax = t; }
       if (t != null && hr && hr < 255) recs.push({t: t + FIT_EPOCH, hr});
     } else if (d.g === 18) {
       sess = {start: v[2] != null ? v[2] + FIT_EPOCH : null, kcal: v[11] != null && v[11] < 0xFFFF ? v[11] : null};
@@ -173,7 +174,7 @@ function parseFit(buf) {
   }
   if (!recs.length) throw new Error('sem frequência cardíaca no arquivo');
   const hrs = recs.map(r => r.hr);
-  return {recs, start: recs[0].t, end: recs[recs.length - 1].t, kcal: sess?.kcal ?? null,
+  return {recs, start: tMin + FIT_EPOCH, end: tMax + FIT_EPOCH, kcal: sess?.kcal ?? null,
     avg: Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length), max: Math.max(...hrs)};
 }
 
@@ -213,6 +214,14 @@ class FitW {
 }
 const ft = ms => Math.round(ms / 1000) - FIT_EPOCH;
 
+const CAT = {BENCH_PRESS:0,SHOULDER_PRESS:24,LATERAL_RAISE:14,TRICEPS_EXTENSION:30,CURL:7,LEG_CURL:15,ROW:23,PULL_UP:21,SQUAT:28,CALF_RAISE:1,FLYE:9,HIP_RAISE:10,HIP_STABILITY:11,CRUNCH:6,SHRUG:26,UNKNOWN:65534};
+const RULES = [[/LEG_CURL/,'LEG_CURL'],[/CHEST_PRESS|BENCH_PRESS|CHEST_FLY.*PRESS/,'BENCH_PRESS'],[/SHOULDER_PRESS|OVERHEAD_PRESS|MILITARY_PRESS/,'SHOULDER_PRESS'],
+  [/LATERAL_RAISE|SIDE_RAISE/,'LATERAL_RAISE'],[/TRICEPS|PRESSDOWN|SKULL/,'TRICEPS_EXTENSION'],[/CURL/,'CURL'],[/PULLDOWN|PULL_DOWN|PULL_UP|CHIN_UP/,'PULL_UP'],
+  [/ROW/,'ROW'],[/LEG_PRESS|SQUAT|HACK|LEG_EXTENSION|LUNGE/,'SQUAT'],[/CALF/,'CALF_RAISE'],[/FLY|FLYE|PEC_DECK/,'FLYE'],[/HIP_THRUST|GLUTE_BRIDGE|KICKBACK/,'HIP_RAISE'],
+  [/ABDUCTION|ADDUCTION/,'HIP_STABILITY'],[/CRUNCH|SIT_UP/,'CRUNCH'],[/SHRUG|UPRIGHT/,'SHRUG']];
+const byKeyword = t => { const r = RULES.find(([re]) => re.test(t)); return r ? CAT[r[1]] : null; };
+const codeFor = t => EXMAP[t] ? {cat: EXMAP[t][0], sub: EXMAP[t][1]} : {cat: byKeyword(t) ?? CAT.UNKNOWN, sub: null};
+
 function buildFit(w) {
   const sets = w.sets, fit = w.fit;
   const startS = fit ? fit.start : Math.round(w.startMs / 1000);
@@ -225,9 +234,10 @@ function buildFit(w) {
   if (fit) for (const r of fit.recs) o.msg(20, [[253,4,U32,r.t - FIT_EPOCH],[3,1,U8,r.hr]]);
   let i = 0;
   for (const s of sets) {
-    const code = EXMAP[s.type]; if (!code) continue;
-    const t = ft(s.ms);
-    o.msg(225, [[253,4,U32,t],[0,4,U32,40000],[3,2,U16,s.reps],[4,2,U16,Math.round(s.kg * 16)],[5,1,U8,1],[6,4,U32,t],[7,2,U16,code[0]],[8,2,U16,code[1]],[254,2,U16,i++]]);
+    const code = codeFor(s.type), t = ft(s.ms);
+    const f = [[253,4,U32,t],[0,4,U32,40000],[3,2,U16,s.reps],[4,2,U16,Math.round(s.kg * 16)],[5,1,U8,1],[6,4,U32,t],[7,2,U16,code.cat]];
+    if (code.sub != null) f.push([8,2,U16,code.sub]);
+    o.msg(225, [...f, [254,2,U16,i++]]);
   }
   const hr = fit ? [[15,1,U8,fit.avg],[16,1,U8,fit.max]] : [];
   const lap = [[253,4,U32,En],[2,4,U32,S],[7,4,U32,tot * 1000],[8,4,U32,tot * 1000]];
@@ -307,7 +317,7 @@ function pair() {
 }
 
 /* ---------- análise ---------- */
-const pretty = t => t.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+const pretty = t => t.replace(/_GENERIC$/, '').split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
 const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
 const dur = s => { s = Math.round(s); const m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
 
@@ -332,7 +342,7 @@ function exercises(w) {
     else if (reps.every(r => r >= cfg.rmax)) { msg = `Todas as séries no topo da faixa (${cfg.rmax} reps). Pode subir a carga na próxima vez.`; }
     else if (Math.min(...reps) < cfg.rmin) { tone = 'warn'; msg = `Alguma série ficou abaixo de ${cfg.rmin} reps. Mantenha ou reduza um pouco a carga.`; }
     else msg = `Dentro da faixa de ${cfg.rmin} a ${cfg.rmax} reps. Mantenha ${fmt(top, 1)} kg até chegar a ${cfg.rmax} reps em todas as séries.`;
-    return {type, ss, vol, tone, msg, mapped: !!EXMAP[type]};
+    return {type, ss, vol, tone, msg, mapped: !!EXMAP[type], generic: !EXMAP[type] && byKeyword(type) == null};
   });
 }
 
@@ -344,8 +354,10 @@ function observations(w, exs) {
     else gaps.push(g);
   }
   if (gaps.length) { const m = median(gaps); o.push([m > 100 ? 'warn' : 'good', `Intervalo típico entre séries (início a início): ${fmt(m / 60, 1)} min. ${m > 100 ? 'Isso inclui o tempo da série; acima de 2 min sugere descanso maior que os 60 a 90 s planejados.' : 'Compatível com descanso curto.'}`]); }
-  const unm = exs.filter(e => !e.mapped).map(e => pretty(e.type));
-  if (unm.length) o.push(['bad', `Sem equivalente no formato FIT, ficam fora do arquivo: ${unm.join(', ')}.`]);
+  const gen = exs.filter(e => e.generic).map(e => pretty(e.type));
+  const apx = exs.filter(e => !e.mapped && !e.generic).map(e => pretty(e.type));
+  if (apx.length) o.push(['good', `Sem código exato no formato FIT, enviados pela categoria do movimento: ${apx.join(', ')}.`]);
+  if (gen.length) o.push(['warn', `Sem categoria reconhecida no formato FIT, enviados como categoria genérica: ${gen.join(', ')}.`]);
   return o;
 }
 
@@ -357,7 +369,7 @@ const PT = {LAT_PULLDOWN:'Puxada na polia',SEATED_CABLE_ROW:'Remada sentada na p
   CABLE_TRICEPS_PUSHDOWN:'Tríceps na polia',OVERHEAD_TRICEPS_EXTENSION:'Tríceps overhead',LEG_PRESS:'Leg Press 45º (Máquina)',
   LEG_EXTENSION:'Cadeira extensora',LEG_CURL:'Mesa flexora',SEATED_LEG_CURL:'Mesa flexora sentada',STANDING_CALF_RAISE:'Panturrilha em pé',
   SHOULDER_PRESS:'Desenvolvimento',MACHINE_SHOULDER_PRESS:'Desenvolvimento máquina',CHEST_PRESS:'Supino máquina',
-  INCLINE_CHEST_PRESS:'Supino inclinado máquina',SEATED_CALF_RAISE:'Panturrilha Sentado (Máquina)',HACK_SQUAT:'Agachamento Hack',HIP_ABDUCTION:'Abdução de quadril'};
+  INCLINE_CHEST_PRESS:'Supino inclinado máquina',MACHINE_CHEST_PRESS:'Supino máquina',MACHINE_INCLINE_CHEST_PRESS:'Supino inclinado máquina',MACHINE_SEATED_SHOULDER_PRESS:'Desenvolvimento máquina',LATERAL_RAISE_GENERIC:'Elevação lateral',TRICEPS_PRESSDOWN:'Tríceps na polia',TRICEPS_EXTENSION_GENERIC:'Extensão de tríceps',SEATED_CALF_RAISE:'Panturrilha Sentado (Máquina)',HACK_SQUAT:'Agachamento Hack',HIP_ABDUCTION:'Abdução de quadril'};
 const ptName = t => PT[t] || pretty(t);
 
 function describe(w, exs) {
