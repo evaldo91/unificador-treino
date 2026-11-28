@@ -56,7 +56,7 @@ scripts/gen_exmap.py        regenera o exmap.json
 
 ## Limitações
 
-- Exercícios que o Hevy exporta com nomes fora do padrão FIT ficam de fora do `.fit` (a página avisa quais).
+- Exercícios de máquina do Hevy (ex.: `MACHINE_CHEST_PRESS`) não têm código exato no FIT. Eles vão no arquivo pela categoria do movimento (supino, desenvolvimento, tríceps etc.); os que não casam com nenhuma categoria vão como genéricos. A página avisa quais.
 - Os nomes em português do texto cobrem os exercícios mais comuns; os demais saem em inglês e podem ser editados na caixa de texto.
 - O `.fit` é gerado sem assinatura do fabricante. O Strava aceita, mas não o trata como atividade de um dispositivo.
 - Se o treino já tiver sincronizado do relógio para o Strava, o envio pode ser recusado como duplicado.
